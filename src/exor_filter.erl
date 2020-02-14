@@ -62,6 +62,9 @@
    xor8_contain/2,
    xor8_contain/3,
    xor8_free/1,
+   xor8_to_bin/1,
+   xor8_from_bin/1,
+   xor8_from_bin/2,
 
    xor16/1,
    xor16/2,
@@ -449,6 +452,22 @@ xor8_free({Filter, _}) ->
 xor8_free_nif(_) ->
    not_loaded(?LINE).
 
+
+xor8_to_bin({Filter, _}) ->
+    xor8_to_bin_nif(Filter).
+
+xor8_to_bin_nif(_) ->
+   not_loaded(?LINE).
+
+
+xor8_from_bin(Bin) ->
+    xor8_from_bin(Bin, default_hash).
+
+xor8_from_bin(Bin, Hash) ->
+    {xor8_from_bin_nif(Bin), Hash}.
+
+xor8_from_bin_nif(_) ->
+   not_loaded(?LINE).
 
 %%-----------------------------------------------------------------------------
 %% @doc Nif api.  Initializes the xor filter on a passed list.  

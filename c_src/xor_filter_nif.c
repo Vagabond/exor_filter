@@ -22,6 +22,27 @@ typedef struct
    xor16_t*    filter;
 } xor16_filter_resource;
 
+// portable encoding/decoding helpers
+void
+unpack_le_u64(uint64_t * dst, uint8_t const * src) {
+    *dst = ((uint64_t)src[7] << 56) | ((uint64_t)src[6] << 48)
+           | ((uint64_t)src[5] << 40) | ((uint64_t)src[4] << 32)
+           | ((uint64_t)src[3] << 24) | ((uint64_t)src[2] << 16)
+           | ((uint64_t)src[1] << 8) | (uint64_t)src[0];
+}
+
+void
+pack_le_u64(uint8_t * dst, uint64_t val) {
+    dst[0] = val & 0xff;
+    dst[1] = (val >> 8) & 0xff;
+    dst[2] = (val >> 16) & 0xff;
+    dst[3] = (val >> 24) & 0xff;
+    dst[4] = (val >> 32) & 0xff;
+    dst[5] = (val >> 40) & 0xff;
+    dst[6] = (val >> 48) & 0xff;
+    dst[7] = (val >> 56) & 0xff;
+}
+
 void 
 destroy_xor8_filter_resource(ErlNifEnv* env, void* obj) 
 {
@@ -263,6 +284,80 @@ xor8_free_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
    return mk_atom(env, "ok");
 }
 
+static ERL_NIF_TERM
+xor8_to_bin_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+
+   if(argc != 1)
+   {
+      return enif_make_badarg(env);
+   }
+
+   xor8_filter_resource* filter_resource;
+   if(!enif_get_resource(env, argv[0], xor8_resource_type, (void**) &filter_resource)) 
+   {
+      return mk_error(env, "get_filter_for_to_bin");
+   }
+
+   xor8_t* filter = filter_resource->filter;
+
+   size_t bin_size = (sizeof(uint64_t)*2) + (sizeof(uint8_t) * filter->blockLength * 3);
+
+   ErlNifBinary bin;
+
+   if(!enif_alloc_binary(bin_size, &bin)) {
+      return mk_error(env, "allocate_binary_for_to_bin");
+   }
+
+   pack_le_u64(bin.data, filter->seed);
+   pack_le_u64(bin.data + sizeof(uint64_t), filter->blockLength);
+   memcpy(bin.data + (sizeof(uint64_t) * 2), filter->fingerprints, filter->blockLength*3);
+
+   return enif_make_binary(env, &bin);
+}
+
+static ERL_NIF_TERM
+xor8_from_bin_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+
+   if(argc != 1)
+   {
+      return enif_make_badarg(env);
+   }
+
+   ErlNifBinary bin;
+
+   if (!enif_inspect_binary(env, argv[0], &bin)) {
+      return enif_make_badarg(env);
+   }
+
+   if (bin.size < sizeof(uint64_t) * 2) {
+      return enif_make_badarg(env);
+   }
+
+   xor8_t* filter = enif_alloc(sizeof(xor8_t));
+
+   unpack_le_u64(&filter->seed, bin.data);
+   unpack_le_u64(&filter->blockLength, bin.data+sizeof(uint64_t));
+
+   if (bin.size != (sizeof(uint64_t)*2) + (filter->blockLength * 3)) {
+       enif_free(filter);
+      return enif_make_badarg(env);
+   }
+
+   filter->fingerprints = enif_alloc(filter->blockLength * 3);
+   memcpy(filter->fingerprints, bin.data+(sizeof(uint64_t) * 2), filter->blockLength * 3);
+
+   xor8_filter_resource* filter_resource = 
+      enif_alloc_resource(xor8_resource_type, sizeof(xor8_filter_resource));
+   filter_resource->is_buffer_allocated = false;
+   filter_resource->is_filter_allocated = true;
+   filter_resource->filter = filter;
+
+   return  enif_make_resource(env, filter_resource);
+}
+
+
 /* Begin xor16 nif code */
 static ERL_NIF_TERM
 xor16_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffered)
@@ -428,6 +523,8 @@ static ErlNifFunc nif_funcs[] = {
       xor8_buffered_initialize_nif, ERL_NIF_DIRTY_JOB_CPU_BOUND},
    {"xor8_contain_nif", 2, xor8_contain_nif},
    {"xor8_free_nif", 1, xor8_free_nif},
+   {"xor8_to_bin_nif", 1, xor8_to_bin_nif},
+   {"xor8_from_bin_nif", 1, xor8_from_bin_nif},
    
    {"xor16_initialize_nif", 1, xor16_initialize_nif},
    {"xor16_initialize_nif_dirty", 1, xor16_initialize_nif, 
