@@ -8,17 +8,11 @@ static ErlNifResourceType* xor16_resource_type;
 
 typedef struct 
 {
-   int         is_buffer_allocated;
-   uint64_t*   buffer;
-   int         is_filter_allocated;
    xor8_t*     filter;
 } xor8_filter_resource;
 
 typedef struct 
 {
-   int         is_buffer_allocated;
-   uint64_t*   buffer;
-   int         is_filter_allocated;
    xor16_t*    filter;
 } xor16_filter_resource;
 
@@ -48,15 +42,8 @@ destroy_xor8_filter_resource(ErlNifEnv* env, void* obj)
 {
    xor8_filter_resource* resource = (xor8_filter_resource*) obj;
 
-   if(obj != NULL && resource->is_filter_allocated) 
-   {
-      xor8_free(resource->filter);
-      enif_free(resource->filter);
-   }
-   if(obj != NULL && resource->is_buffer_allocated) 
-   {
-      enif_free(resource->buffer);
-   }
+   xor8_free(resource->filter);
+   enif_free(resource->filter);
 }
 
 void 
@@ -64,15 +51,8 @@ destroy_xor16_filter_resource(ErlNifEnv* env, void* obj)
 {
    xor16_filter_resource* resource = (xor16_filter_resource*) obj;
 
-   if(obj != NULL && resource->is_filter_allocated) 
-   {
-      xor16_free(resource->filter);
-      enif_free(resource->filter);
-   }
-   if(obj != NULL && resource->is_buffer_allocated) 
-   {
-      enif_free(resource->buffer);
-   }
+   xor16_free(resource->filter);
+   enif_free(resource->filter);
 }
 
 ErlNifResourceType* 
@@ -159,11 +139,6 @@ xor8_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffere
       return mk_error(env, "get_list_length_error");
    }
 
-   xor8_filter_resource* filter_resource = 
-      enif_alloc_resource(xor8_resource_type, sizeof(xor8_filter_resource));
-   filter_resource->is_buffer_allocated = false;
-   filter_resource->is_filter_allocated = false;
-
    value_list = enif_alloc(sizeof(uint64_t) * list_length);
 
    if(value_list == NULL) 
@@ -171,23 +146,18 @@ xor8_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffere
       return mk_error(env, "could_not_allocate_memory_error");
    }
 
-   filter_resource->buffer = value_list;
-   filter_resource->is_buffer_allocated = true;
-
-   if(!(fill_buffer(filter_resource->buffer, env, argv[0]))) 
+   if(!(fill_buffer(value_list, env, argv[0]))) 
    {
-      enif_release_resource(filter_resource);
+      enif_free(value_list);
       return mk_error(env, "convert_to_uint64_t_error");
    }
 
-   // We don't populate the resource yet, because of the call to xor8_free, which
-   // would cause a segfault.  Need to manually free this memory.
    xor8_t* filter = enif_alloc(sizeof(xor8_t));
 
    if(!xor8_allocate(list_length, filter)) 
    {
+      enif_free(value_list);
       enif_free(filter);
-      enif_release_resource(filter_resource);
       return mk_error(env, "xor8_allocate_error");
    }
 
@@ -196,8 +166,8 @@ xor8_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffere
    {
       if(!xor8_buffered_populate(value_list, list_length, filter)) 
       {
+         enif_free(value_list);
          enif_free(filter);
-         enif_release_resource(filter_resource);
          return mk_error(env, "duplicates_in_hash_error");
       }
    }
@@ -205,17 +175,19 @@ xor8_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffere
    {
       if(!xor8_populate(value_list, list_length, filter)) 
       {
+         enif_free(value_list);
          enif_free(filter);
-         enif_release_resource(filter_resource);
          return mk_error(env, "duplicates_in_hash_error");
       }
    }
 
-   filter_resource->filter = filter;
-   filter_resource->is_filter_allocated = true;
-   ERL_NIF_TERM term = enif_make_resource(env, filter_resource);
+   enif_free(value_list);
 
-   return term;
+   xor8_filter_resource* filter_resource = 
+      enif_alloc_resource(xor8_resource_type, sizeof(xor8_filter_resource));
+
+   filter_resource->filter = filter;
+   return enif_make_resource(env, filter_resource);
 }
 
 static ERL_NIF_TERM
@@ -350,8 +322,6 @@ xor8_from_bin_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 
    xor8_filter_resource* filter_resource = 
       enif_alloc_resource(xor8_resource_type, sizeof(xor8_filter_resource));
-   filter_resource->is_buffer_allocated = false;
-   filter_resource->is_filter_allocated = true;
    filter_resource->filter = filter;
 
    return  enif_make_resource(env, filter_resource);
@@ -381,11 +351,6 @@ xor16_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffer
       return mk_error(env, "get_list_length_error");
    }
 
-   xor16_filter_resource* filter_resource = 
-      enif_alloc_resource(xor16_resource_type, sizeof(xor8_filter_resource));
-   filter_resource->is_buffer_allocated = false;
-   filter_resource->is_filter_allocated = false;
-
    value_list = enif_alloc(sizeof(uint64_t) * list_length);
 
    if(value_list == NULL) 
@@ -393,11 +358,8 @@ xor16_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffer
       return mk_error(env, "could_not_allocate_memory_error");
    }
 
-   filter_resource->buffer = value_list;
-   filter_resource->is_buffer_allocated = true;
-
-   if(!(fill_buffer(filter_resource->buffer, env, argv[0]))) {
-      enif_release_resource(filter_resource);
+   if(!(fill_buffer(value_list, env, argv[0]))) {
+      enif_free(value_list);
       return mk_error(env, "convert_to_uint64_t_error");
    }
 
@@ -407,8 +369,8 @@ xor16_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffer
 
    if(!xor16_allocate(list_length, filter)) 
    {
+      enif_free(value_list);
       enif_free(filter);
-      enif_release_resource(filter);
       return mk_error(env, "xor16_allocate_error");
    }
 
@@ -417,8 +379,8 @@ xor16_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffer
    {
       if(!xor16_buffered_populate(value_list, list_length, filter)) 
       {
+         enif_free(value_list);
          enif_free(filter);
-         enif_release_resource(filter_resource);
          return mk_error(env, "duplicates_in_hash_error");
       }
    }
@@ -426,17 +388,18 @@ xor16_initialize(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[], int buffer
    {
       if(!xor16_populate(value_list, list_length, filter)) 
       {
+         enif_free(value_list);
          enif_free(filter);
-         enif_release_resource(filter_resource);
          return mk_error(env, "duplicates_in_hash_error");
       }
    }
 
-   filter_resource->filter = filter;
-   filter_resource->is_filter_allocated = true;
-   ERL_NIF_TERM term = enif_make_resource(env, filter_resource);
+   enif_free(value_list);
 
-   return term;
+   xor16_filter_resource* filter_resource = 
+      enif_alloc_resource(xor16_resource_type, sizeof(xor8_filter_resource));
+   filter_resource->filter = filter;
+   return enif_make_resource(env, filter_resource);
 }
 
 static ERL_NIF_TERM
@@ -574,8 +537,6 @@ xor16_from_bin_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 
    xor16_filter_resource* filter_resource = 
       enif_alloc_resource(xor16_resource_type, sizeof(xor16_filter_resource));
-   filter_resource->is_buffer_allocated = false;
-   filter_resource->is_filter_allocated = true;
    filter_resource->filter = filter;
 
    return  enif_make_resource(env, filter_resource);
