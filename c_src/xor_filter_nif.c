@@ -523,7 +523,7 @@ xor16_to_bin_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 
    xor16_t* filter = filter_resource->filter;
 
-   size_t bin_size = (sizeof(uint64_t)*2) + (sizeof(uint8_t) * filter->blockLength * 3);
+   size_t bin_size = (sizeof(uint64_t)*2) + (sizeof(uint16_t) * filter->blockLength * 3);
 
    ErlNifBinary bin;
 
