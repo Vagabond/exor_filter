@@ -72,7 +72,10 @@
    xor16_buffered/2,
    xor16_contain/2,
    xor16_contain/3,
-   xor16_free/1
+   xor16_free/1,
+   xor16_to_bin/1,
+   xor16_from_bin/1,
+   xor16_from_bin/2
 ]).
 -on_load(init/0).
 
@@ -611,6 +614,24 @@ xor16_free({Filter, _}) ->
 
 xor16_free_nif(_) ->
    not_loaded(?LINE).
+
+
+xor16_to_bin({Filter, _}) ->
+    xor16_to_bin_nif(Filter).
+
+xor16_to_bin_nif(_) ->
+   not_loaded(?LINE).
+
+
+xor16_from_bin(Bin) ->
+    xor16_from_bin(Bin, default_hash).
+
+xor16_from_bin(Bin, Hash) ->
+    {xor16_from_bin_nif(Bin), Hash}.
+
+xor16_from_bin_nif(_) ->
+   not_loaded(?LINE).
+
 
 
 over_10_thousand(List) ->

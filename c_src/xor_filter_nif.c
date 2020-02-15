@@ -506,6 +506,81 @@ xor16_free_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
    return mk_atom(env, "ok");
 }
 
+static ERL_NIF_TERM
+xor16_to_bin_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+
+   if(argc != 1)
+   {
+      return enif_make_badarg(env);
+   }
+
+   xor16_filter_resource* filter_resource;
+   if(!enif_get_resource(env, argv[0], xor16_resource_type, (void**) &filter_resource)) 
+   {
+      return mk_error(env, "get_filter_for_to_bin");
+   }
+
+   xor16_t* filter = filter_resource->filter;
+
+   size_t bin_size = (sizeof(uint64_t)*2) + (sizeof(uint8_t) * filter->blockLength * 3);
+
+   ErlNifBinary bin;
+
+   if(!enif_alloc_binary(bin_size, &bin)) {
+      return mk_error(env, "allocate_binary_for_to_bin");
+   }
+
+   pack_le_u64(bin.data, filter->seed);
+   pack_le_u64(bin.data + sizeof(uint64_t), filter->blockLength);
+   // TODO endianness
+   memcpy(bin.data + (sizeof(uint64_t) * 2), filter->fingerprints, filter->blockLength*sizeof(uint16_t)*3);
+
+   return enif_make_binary(env, &bin);
+}
+
+static ERL_NIF_TERM
+xor16_from_bin_nif(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+
+   if(argc != 1)
+   {
+      return enif_make_badarg(env);
+   }
+
+   ErlNifBinary bin;
+
+   if (!enif_inspect_binary(env, argv[0], &bin)) {
+      return enif_make_badarg(env);
+   }
+
+   if (bin.size < sizeof(uint64_t) * 2) {
+      return enif_make_badarg(env);
+   }
+
+   xor16_t* filter = enif_alloc(sizeof(xor16_t));
+
+   unpack_le_u64(&filter->seed, bin.data);
+   unpack_le_u64(&filter->blockLength, bin.data+sizeof(uint64_t));
+
+   if (bin.size != (sizeof(uint64_t)*2) + (filter->blockLength * sizeof(uint16_t) * 3)) {
+       enif_free(filter);
+      return enif_make_badarg(env);
+   }
+
+   // TODO endianness
+   filter->fingerprints = enif_alloc(filter->blockLength * sizeof(uint16_t) * 3);
+   memcpy(filter->fingerprints, bin.data+(sizeof(uint64_t) * 2), filter->blockLength * sizeof(uint16_t) * 3);
+
+   xor16_filter_resource* filter_resource = 
+      enif_alloc_resource(xor16_resource_type, sizeof(xor16_filter_resource));
+   filter_resource->is_buffer_allocated = false;
+   filter_resource->is_filter_allocated = true;
+   filter_resource->filter = filter;
+
+   return  enif_make_resource(env, filter_resource);
+}
+
 static int
 nif_load(ErlNifEnv* env, void** priv_data, ERL_NIF_TERM load_info)
 {
@@ -534,7 +609,10 @@ static ErlNifFunc nif_funcs[] = {
    {"xor16_buffered_initialize_nif_dirty", 1, 
       xor16_buffered_initialize_nif, ERL_NIF_DIRTY_JOB_CPU_BOUND},
    {"xor16_contain_nif", 2, xor16_contain_nif},
-   {"xor16_free_nif", 1, xor16_free_nif}
+   {"xor16_free_nif", 1, xor16_free_nif},
+   {"xor16_to_bin_nif", 1, xor16_to_bin_nif},
+   {"xor16_from_bin_nif", 1, xor16_from_bin_nif},
+
 };
 
 ERL_NIF_INIT(exor_filter, nif_funcs, nif_load, NULL, NULL, NULL);

@@ -24,7 +24,10 @@
     new_buffered/2,
     contain/2,
     contain/3,
-    free/1
+    free/1,
+    to_bin/1,
+    from_bin/1,
+    from_bin/2
 ]).
 
 %%-----------------------------------------------------------------------------
@@ -114,3 +117,13 @@ contain(Filter, Key, ReturnValue) ->
 
 free(Filter) ->
     exor_filter:xor16_free(Filter).
+
+
+to_bin(Filter) ->
+    exor_filter:xor16_to_bin(Filter).
+
+from_bin(Filter) ->
+    exor_filter:xor16_from_bin(Filter).
+
+from_bin(Filter, Hash) ->
+    exor_filter:xor16_from_bin(Filter, Hash).
